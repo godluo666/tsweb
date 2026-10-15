@@ -23,6 +23,8 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: bash -n deploy.sh
+      - name: Validate one-command deployment configuration
+        run: bash test/deploy.test.sh
       - name: Start TeamSpeak test server
         run: docker run -d --name tsweb-test-ts -e TS3SERVER_LICENSE=accept -p 9987:9987/udp teamspeak:3.13.7
       - name: Test real TeamSpeak voice and text
@@ -66,6 +68,17 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Verify published container
+        env:
+          IMAGE: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+        run: |
+          docker run -d --name tsweb-smoke -p 127.0.0.1:8080:8080 -e TS_HOST=example.test "$IMAGE"
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/health; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8080/ | grep -q TSWeb
+          docker exec tsweb-smoke node --input-type=module -e "import OpusScript from 'opusscript'; const encoder=new OpusScript(48000,1,OpusScript.Application.VOIP); if(!encoder.encode(Buffer.alloc(1920),960).length)process.exit(1); encoder.delete()"
       - name: Create version release
         if: startsWith(github.ref, 'refs/tags/')
         env:

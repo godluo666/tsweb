@@ -67,7 +67,7 @@ fi
 env_value() {
   local name="$1" value="$2"
   [[ "$value" != *$'\n'* && "$value" != *$'\r'* ]] || { echo "$name 不能包含换行" >&2; exit 1; }
-  value="${value//\'/\'\\\'}"
+  value="${value//\'/\\\'}"
   printf "%s='%s'\n" "$name" "$value"
 }
 umask 077
