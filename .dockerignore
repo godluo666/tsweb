@@ -1,0 +1,13 @@
+.git
+.github
+node_modules
+dist
+data
+.env*
+.cache
+.upstream
+.test-data
+.preview
+AGENTS.md
+.publish-api.mjs
+.publish-body.json

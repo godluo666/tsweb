@@ -1,0 +1,19 @@
+const paths = {
+  headset: '<path d="M4 13v-1a8 8 0 0 1 16 0v1M4 12h3v8H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2Zm16 0h-3v8h3a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2Z"/>',
+  volume: '<path d="m11 5-6 4H2v6h3l6 4V5Zm4 3a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>',
+  mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/>',
+  micOff: '<path d="m2 2 20 20M9 9v3a3 3 0 0 0 5 2M9 5V4a3 3 0 0 1 6 0v7M5 10v2a7 7 0 0 0 12 5m2-5v-2M12 19v3m-4 0h8"/>',
+  earOff: '<path d="m2 2 20 20M4 12V9m1-4a8 8 0 0 1 15 4v3M4 12h3v8H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2Zm16 0h-3v5m3-5a2 2 0 0 1 2 2v4"/>',
+  chat: '<path d="M21 11a9 9 0 0 1-9 9 10 10 0 0 1-4-1l-5 2 2-5a9 9 0 1 1 16-5Z"/><path d="M8 10h8m-8 4h5"/>',
+  arrow: '<path d="m9 5 7 7-7 7"/>',
+  down: '<path d="m6 9 6 6 6-6"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-4M16 3a4 4 0 0 1 0 8"/><circle cx="9" cy="7" r="4"/>',
+  send: '<path d="m22 2-7 20-4-9L2 9l20-7ZM22 2 11 13"/>',
+  leave: '<path d="M10 17l5-5-5-5m5 5H2m7-9h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H9"/>',
+  refresh: '<path d="M20 7v5h-5M4 17v-5h5m10-3a8 8 0 0 0-13-4L4 7m16 10-2 2A8 8 0 0 1 5 15"/>',
+  lock: '<rect x="4" y="10" width="16" height="12" rx="3"/><path d="M8 10V6a4 4 0 0 1 8 0v4m-4 5v2"/>',
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  close: '<path d="m6 6 12 12M6 18 18 6"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a18 18 0 0 1 0 20 18 18 0 0 1 0-20Z"/>',
+};
+export const icon = name => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || ''}</svg>`;

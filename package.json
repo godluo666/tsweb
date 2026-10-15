@@ -1,0 +1,26 @@
+{
+  "name": "tsweb",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "精简的 TeamSpeak 网页语音与频道聊天客户端",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@honeybbq/teamspeak-client": "0.3.2",
+    "opus-decoder": "0.7.12",
+    "opusscript": "0.1.1",
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "vite": "8.3.4"
+  }
+}
