@@ -41,6 +41,12 @@ test('真实 TS3：两位成员进入、收发文字和 Opus 语音、断开释�
     assert.ok(snapshot.channels.length > 0);
     assert.ok(snapshot.clients.some(client => client.name === 'TSWeb Bob'));
     assert.notEqual(snapshot.channelId, '0');
+    const statsDeadline = Date.now() + 6000;
+    while (alice.connectionStats().tsRttMs === null && Date.now() < statsDeadline) await delay(20);
+    const stats = alice.connectionStats();
+    assert.ok(stats.tsRttMs !== null && stats.tsRttMs >= 0, '原生 UDP Pong 应提供实际延迟');
+    assert.equal(stats.packetLossPercent, 0);
+    assert.ok(stats.probes > 0);
     const textReceived = once(bob, 'chat', { signal: AbortSignal.timeout(10_000) });
     const sent = await alice.chat('你好，TeamSpeak <>& | \\ /');
     assert.equal((await textReceived)[0].text, sent.text);
@@ -56,6 +62,12 @@ test('真实 TS3：两位成员进入、收发文字和 Opus 语音、断开释�
     const createdView = await waitForView(alice, value => value.channels.some(channel => channel.name === 'TSWeb-test-channel'));
     const created = createdView.channels.find(channel => channel.name === 'TSWeb-test-channel');
     assert.ok(created, '新频道应通过原生通知进入频道树');
+    await alice.client.execCommand(`channeledit cid=${created.id} channel_codec_quality=6 channel_topic=Integration\\sTopic channel_description=Integration\\sDescription`);
+    const info = await bob.channelInfo(created.id);
+    assert.equal(info.topic, 'Integration Topic');
+    assert.equal(info.description, 'Integration Description');
+    assert.equal(info.quality, 6);
+    assert.equal((await bob.snapshot()).channelId, defaultChannel);
     await bob.move(created.id, '');
     assert.equal((await waitForView(bob, value => value.channelId === created.id)).channelId, created.id);
     await alice.move(defaultChannel, '');

@@ -8,10 +8,11 @@ export class VoiceAudio {
     this.muted = true;
     this.deafened = false;
     this.volume = 1;
+    this.userVolumes = new Map();
   }
 
   async prepare() {
-    if (!window.isSecureContext) throw new Error('麦克风需要 HTTPS。请通过域名访问，或在本机使用 localhost。');
+    if (!window.isSecureContext) throw new Error('麦克风需要 HTTPS。请使用可信的 HTTPS 地址，或在本机使用 localhost。');
     this.context = new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' });
     await this.context.resume();
     if (this.context.sampleRate !== 48000) throw new Error('当前浏览器无法启用 48 kHz 音频，请使用新版 Chrome、Edge、Firefox 或 Safari。');
@@ -20,6 +21,7 @@ export class VoiceAudio {
       this.context.audioWorklet.addModule('/voice-player-worklet.js'),
     ]);
     this.player = new AudioWorkletNode(this.context, 'voice-player', { outputChannelCount: [2] });
+    for (const [clientId, value] of this.userVolumes) this.setUserVolume(clientId, value);
     this.gain = this.context.createGain();
     this.gain.gain.value = this.volume;
     this.player.connect(this.gain).connect(this.context.destination);
@@ -73,6 +75,24 @@ export class VoiceAudio {
     this.volume = volume;
     this.deafened = deafened;
     if (this.gain) this.gain.gain.value = deafened ? 0 : volume;
+  }
+
+  setUserVolume(clientId, value) {
+    const volume = Math.max(0, Math.min(2, value));
+    this.userVolumes.set(clientId, volume);
+    this.player?.port.postMessage({ type: 'gain', clientId, value: volume });
+  }
+
+  syncUsers(clients) {
+    const ids = new Set(clients.map(client => client.id));
+    for (const [clientId, entry] of this.decoders) if (!ids.has(clientId)) {
+      this.decoders.delete(clientId);
+      entry.ready.then(() => entry.decoder.free());
+    }
+    for (const clientId of this.userVolumes.keys()) if (!ids.has(clientId)) {
+      this.userVolumes.delete(clientId);
+      this.player?.port.postMessage({ type: 'gain', clientId, value: 1 });
+    }
   }
 
   async receive(buffer) {

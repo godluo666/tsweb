@@ -96,11 +96,16 @@ export function createApp(config, sessionFactory = (...args) => new TeamSpeakSes
         }
         return;
       }
+      let message;
+      try { message = JSON.parse(data.toString()); if (!message || typeof message !== 'object') throw new Error('请求格式不正确'); }
+      catch { send({ type: 'error', message: '请求格式不正确' }); return; }
+      if (message.type === 'ping' && connected && !closed) {
+        send({ type: 'ack', id: message.id, stats: session.connectionStats() });
+        return;
+      }
       queue = queue.then(async () => {
         if (closed) return;
-        let message;
         try {
-          message = JSON.parse(data.toString());
           if (message.type === 'join') {
             if (session) throw new Error('当前连接已经加入服务器');
             if (config.webPassword && message.password !== config.webPassword) throw new Error('访问密码不正确');
@@ -146,6 +151,10 @@ export function createApp(config, sessionFactory = (...args) => new TeamSpeakSes
               await refresh();
             } else if (message.type === 'audio-state') {
               await session.audioState(Boolean(message.muted), Boolean(message.deafened));
+            } else if (message.type === 'channel-info') {
+              if (!/^\d+$/.test(String(message.channelId))) throw new Error('频道编号无效');
+              send({ type: 'ack', id: message.id, channel: await session.channelInfo(String(message.channelId)) });
+              return;
             } else if (message.type === 'refresh') {
               await refresh();
             } else throw new Error('不支持的操作');

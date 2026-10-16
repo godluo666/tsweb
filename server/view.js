@@ -37,6 +37,15 @@ export class ServerView {
       if (params.channel_order !== undefined || params.order !== undefined) channel.order = params.channel_order ?? params.order;
       if (params.channel_codec !== undefined) channel.codec = Number(params.channel_codec);
       if (params.channel_flag_password !== undefined) channel.hasPassword = params.channel_flag_password === '1';
+      for (const [key, field] of [['topic', 'channel_topic'], ['description', 'channel_description']]) {
+        if (params[field] !== undefined) channel[key] = params[field];
+      }
+      for (const [key, field] of [['quality', 'channel_codec_quality'], ['maxClients', 'channel_maxclients'], ['neededTalkPower', 'channel_needed_talk_power']]) {
+        if (params[field] !== undefined) channel[key] = Number(params[field]);
+      }
+      for (const [key, field] of [['permanent', 'channel_flag_permanent'], ['semiPermanent', 'channel_flag_semi_permanent'], ['isDefault', 'channel_flag_default'], ['unlimitedClients', 'channel_flag_maxclients_unlimited']]) {
+        if (params[field] !== undefined) channel[key] = params[field] === '1';
+      }
       this.channels.set(id, channel);
     } else if (name === 'notifychanneldeleted') {
       this.channels.delete(params.cid);
@@ -44,6 +53,7 @@ export class ServerView {
       const id = Number(params.clid);
       const client = this.clients.get(id) || { id, name: '', channelId: '0', type: 0, muted: false, deafened: false };
       if (params.client_nickname !== undefined) client.name = params.client_nickname;
+      if (params.client_unique_identifier !== undefined) client.uid = params.client_unique_identifier;
       if (params.ctid !== undefined) client.channelId = params.ctid;
       if (params.client_type !== undefined) client.type = Number(params.client_type);
       if (params.client_input_muted !== undefined) client.muted = params.client_input_muted === '1';

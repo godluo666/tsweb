@@ -14,6 +14,21 @@ test('普通客户端的欢迎序列与压缩批次构成频道树和成员列�
   assert.equal(snapshot.clients[1].channelId, '1');
 });
 
+test('频道信息通知保留主题、描述、人数上限和成员 UID', () => {
+  const view = new ServerView(() => {});
+  view.packet({ typeFlagged: 2, data: Buffer.from('channellist cid=1 channel_name=大厅 channel_topic=频道\\s主题 channel_codec_quality=7 channel_maxclients=10 channel_flag_permanent=1 channel_flag_default=1 channel_needed_talk_power=5\nnotifychanneledited cid=1 channel_description=第一行\\n第二行\nnotifycliententerview clid=10 ctid=1 client_nickname=甲用户 client_unique_identifier=stable-uid') });
+  const snapshot = view.snapshot(10);
+  const channel = snapshot.channels[0];
+  assert.equal(channel.topic, '频道 主题');
+  assert.equal(channel.description, '第一行\n第二行');
+  assert.equal(channel.quality, 7);
+  assert.equal(channel.maxClients, 10);
+  assert.equal(channel.permanent, true);
+  assert.equal(channel.isDefault, true);
+  assert.equal(channel.neededTalkPower, 5);
+  assert.equal(snapshot.clients[0].uid, 'stable-uid');
+});
+
 test('移动、改名、静音与离开由服务器事件即时更新', () => {
   const view = new ServerView(() => {});
   const packet = text => view.packet({ typeFlagged: 2, data: Buffer.from(text) });

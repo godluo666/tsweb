@@ -16,6 +16,12 @@ class FakeSession extends EventEmitter {
   async move(channelId, password) { if (channelId === '2' && password !== '秘密') throw new Error('invalid channel password'); this.channelId = channelId; }
   async chat(text) { if (text === '被拒绝') throw new Error('insufficient client permissions'); return { text, sender: '测试用户', channelId: this.channelId, scope: 'channel' }; }
   async audioState(muted, deafened) { Object.assign(this, { muted, deafened }); }
+  connectionStats() { return { tsRttMs: 12.5, packetLossPercent: 0, probes: 4, windowSeconds: 60 }; }
+  async channelInfo(channelId) {
+    const channel = (await this.snapshot()).channels.find(item => item.id === channelId);
+    if (!channel) throw new Error('频道不存在或不可见');
+    return { ...channel, topic: '测试主题', description: '<b>频道说明</b>', quality: 7, clients: 2 };
+  }
   pcm(data) { this.lastPcm = data; }
   async close() { this.closed = true; this.emit('closed'); }
 }
@@ -113,6 +119,31 @@ test('访问密码和昵称不正确时不会建立 TeamSpeak 连接', async t =
   send('join', { id: 'short', nickname: '短', password: '秘密' });
   assert.match((await until(message => message.id === 'short')).message, /3–30/);
   assert.equal(sessions.length, 0);
+});
+
+test('频道信息按请求返回，网络探测不等待频道查询完成', async t => {
+  const { join, send, until, sessions, socket } = await setup(t);
+  socket.send('null');
+  await until(message => message.type === 'error' && /格式/.test(message.message));
+  send('ping', { id: 'not-connected' });
+  assert.match((await until(message => message.id === 'not-connected')).message, /先连接/);
+  await join();
+  send('channel-info', { id: 'info', channelId: '2' });
+  const info = await until(message => message.id === 'info');
+  assert.equal(info.channel.description, '<b>频道说明</b>');
+  assert.equal(sessions[0].channelId, '1');
+  send('channel-info', { id: 'missing', channelId: '999' });
+  assert.match((await until(message => message.id === 'missing')).message, /不存在/);
+
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  sessions[0].channelInfo = async () => { await held; return { id: '1' }; };
+  t.after(release);
+  send('channel-info', { id: 'slow', channelId: '1' });
+  send('ping', { id: 'stats' });
+  assert.deepEqual((await until(message => message.id === 'stats')).stats, { tsRttMs: 12.5, packetLossPercent: 0, probes: 4, windowSeconds: 60 });
+  release();
+  await until(message => message.id === 'slow');
 });
 
 test('频道切换遵守密码，消息等待服务器确认，音频双向转发', async t => {
