@@ -162,6 +162,7 @@ async function connect(event) {
   renderStatus();
   try {
     audio = new VoiceAudio(onSpeaking, notify);
+    audio.setOutput(Number($('#volume').value) / 100, false);
     await audio.prepare();
     let identity = localStorage.getItem('tsweb.identity');
     if (!identity) { identity = crypto.randomUUID(); localStorage.setItem('tsweb.identity', identity); }
@@ -212,6 +213,8 @@ async function connect(event) {
 $('#connect-form').addEventListener('submit', connect);
 $('#nickname').value = localStorage.getItem('tsweb.nickname') || '';
 $('#server-address').value = localStorage.getItem('tsweb.server') || '';
+$('#volume').value = localStorage.getItem('tsweb.volume') ?? '100';
+$('#volume-value').textContent = `${$('#volume').value}%`;
 $('#leave').onclick = async () => {
   $('#leave').disabled = true;
   $('#connect-error').textContent = '已离开服务器，可以填写另一个地址重新连接。';
@@ -272,6 +275,7 @@ $('#deafen').onclick = async () => {
 };
 $('#volume').oninput = () => {
   $('#volume-value').textContent = `${$('#volume').value}%`;
+  localStorage.setItem('tsweb.volume', $('#volume').value);
   audio?.setOutput(Number($('#volume').value) / 100, state.deafened);
 };
 $('#chat-form').onsubmit = async event => {
