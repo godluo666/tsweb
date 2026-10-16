@@ -143,7 +143,12 @@ kbd { font: inherit; color: #91a4bf; }
 .detail-properties dd { margin: 0; color: #bdcce3; text-align: right; }
 .detail-section { margin: 25px 0 0; }
 .detail-section h4 { font-size: 11px; font-weight: 500; color: #8298b8; margin: 0 0 12px; }
-.detail-section p { margin: 0; color: #b2c2dc; font-size: 12px; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
+.detail-section p, .channel-description { margin: 0; color: #b2c2dc; font-size: 12px; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
+.channel-description .bb-align { display: inline-block; width: 100%; vertical-align: top; }
+.channel-description .bb-center { text-align: center; }
+.channel-description .bb-left { text-align: left; }
+.channel-description .bb-right { text-align: right; }
+.channel-description a { color: #a4c4ff; text-decoration: underline; text-underline-offset: 3px; }
 .connect-layer { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 28px 18px; overflow-y: auto; background: radial-gradient(ellipse at 30% 0%,#23355260,transparent 55%),#0b111bf2; backdrop-filter: blur(12px); }
 .connect-card { width: 418px; max-width: 100%; margin: auto 0; padding: 30px 32px 24px; flex-shrink: 0; background: #171f2d; border: 1px solid #ffffff12; border-radius: 17px; box-shadow: 0 25px 90px #0005; }
 .connect-logo { display: flex; align-items: center; gap: 10px; color: var(--accent); margin-bottom: 26px; }

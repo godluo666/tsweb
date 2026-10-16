@@ -2,6 +2,7 @@ import './style.css';
 import { icon } from './icons.js';
 import { VoiceAudio } from './audio.js';
 import { mountSettings } from './settings.js';
+import { renderBBCode } from './bbcode.js';
 
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -214,7 +215,7 @@ function renderChannelInfo(channel, loading = false) {
     ['音频编码', codecName(channel.codec)], ['音频质量', channel.quality == null ? '—' : `${channel.quality} / 10`],
     ['进入密码', channel.hasPassword ? '需要密码' : '无需密码'], ['所需发言权限', channel.neededTalkPower ?? '—'],
   ];
-  $('#channel-info-body').innerHTML = `<div class="detail-channel-icon">${icon(channel.hasPassword ? 'lock' : 'volume')}</div><h3>${escape(channel.name)}</h3>${channel.isDefault ? '<span class="detail-badge">默认频道</span>' : ''}<dl class="detail-properties">${rows.map(([key, value]) => `<div><dt>${key}</dt><dd>${escape(value)}</dd></div>`).join('')}</dl><section class="detail-section"><h4>频道主题</h4><p>${escape(channel.topic || (loading ? '正在读取…' : '未设置主题'))}</p></section><section class="detail-section"><h4>频道描述</h4><p class="channel-description">${escape(channel.description || (loading ? '正在读取…' : '未设置描述'))}</p></section>`;
+  $('#channel-info-body').innerHTML = `<div class="detail-channel-icon">${icon(channel.hasPassword ? 'lock' : 'volume')}</div><h3>${escape(channel.name)}</h3>${channel.isDefault ? '<span class="detail-badge">默认频道</span>' : ''}<dl class="detail-properties">${rows.map(([key, value]) => `<div><dt>${key}</dt><dd>${escape(value)}</dd></div>`).join('')}</dl><section class="detail-section"><h4>频道主题</h4><p>${escape(channel.topic || (loading ? '正在读取…' : '未设置主题'))}</p></section><section class="detail-section"><h4>频道描述</h4><div class="channel-description">${renderBBCode(channel.description || (loading ? '正在读取…' : '未设置描述'))}</div></section>`;
 }
 
 async function openChannelInfo(channelId) {
