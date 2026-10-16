@@ -4,12 +4,37 @@ import { readFile } from 'node:fs/promises';
 import { WebSocketServer, WebSocket } from 'ws';
 import { TeamSpeakSession } from './teamspeak.js';
 import { parseServerAddress } from './address.js';
+import { saveSettings } from './settings.js';
 
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.wasm': 'application/wasm', '.png': 'image/png', '.ico': 'image/x-icon' };
 
 export function createApp(config, sessionFactory = (...args) => new TeamSpeakSession(...args)) {
+  const publicConfig = () => ({ siteName: config.serverName, passwordRequired: Boolean(config.webPassword) });
+  const settings = () => ({ siteName: config.serverName, webPassword: config.webPassword, securityLevel: config.securityLevel });
   const server = http.createServer(async (req, res) => {
     const pathname = new URL(req.url, 'http://localhost').pathname;
+    if (pathname === '/api/settings') {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Cache-Control', 'no-store');
+      if (!config.adminPassword || req.headers.authorization !== `Bearer ${config.adminPassword}`) {
+        res.writeHead(401).end(JSON.stringify({ error: '管理密码不正确' })); return;
+      }
+      if (req.method === 'GET') { res.end(JSON.stringify(settings())); return; }
+      if (req.method !== 'PUT') { res.writeHead(405).end(); return; }
+      try {
+        const chunks = [];
+        for await (const chunk of req) chunks.push(chunk);
+        await saveSettings(config, JSON.parse(Buffer.concat(chunks).toString('utf8')));
+        const message = JSON.stringify({ type: 'site-config', ...publicConfig() });
+        for (const socket of wss.clients) if (socket.readyState === WebSocket.OPEN) socket.send(message);
+        res.end(JSON.stringify(settings()));
+      } catch (error) {
+        const invalid = error instanceof TypeError || error instanceof RangeError || error instanceof SyntaxError;
+        if (!invalid) console.error('无法保存网站设置:', error.message);
+        res.writeHead(invalid ? 400 : 500).end(JSON.stringify({ error: invalid ? error.message : '无法保存设置，请检查数据卷是否可写' }));
+      }
+      return;
+    }
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.writeHead(405).end(); return;
     }
@@ -18,7 +43,7 @@ export function createApp(config, sessionFactory = (...args) => new TeamSpeakSes
     }
     if (pathname === '/api/config') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      res.end(JSON.stringify({ siteName: config.serverName, passwordRequired: Boolean(config.webPassword) })); return;
+      res.end(JSON.stringify(publicConfig())); return;
     }
     try {
       const file = path.resolve(config.distDir, `.${decodeURIComponent(pathname === '/' ? '/index.html' : pathname)}`);

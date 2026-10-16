@@ -7,6 +7,7 @@ import path from 'node:path';
 import { WebSocket } from 'ws';
 import { createApp } from '../server/app.js';
 import { readConfig } from '../server/config.js';
+import { loadSettings } from '../server/settings.js';
 
 class FakeSession extends EventEmitter {
   constructor(config, key, nickname, target) { super(); Object.assign(this, { config, key, nickname, target }); }
@@ -23,7 +24,8 @@ async function setup(t, overrides = {}) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'tsweb-test-'));
   await writeFile(path.join(directory, 'index.html'), '<title>TSWeb</title>');
   const sessions = [];
-  const config = { ...readConfig({}), distDir: directory, ...overrides };
+  const config = { ...readConfig({}), distDir: directory, dataDir: directory, ...overrides };
+  await loadSettings(config);
   const app = createApp(config, (...args) => { const session = new FakeSession(...args); sessions.push(session); return session; });
   await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${app.server.address().port}`;
@@ -40,8 +42,58 @@ async function setup(t, overrides = {}) {
   }
   function send(type, payload = {}) { socket.send(JSON.stringify({ type, ...payload })); }
   async function join(target = {}) { send('join', { id: 'join', identity: '11111111-1111-4111-8111-111111111111', nickname: '测试用户', password: overrides.webPassword || '', serverAddress: 'ts.example.com', ...target }); await until(message => message.type === 'ack' && message.id === 'join'); }
-  return { origin, socket, messages, until, send, join, sessions };
+  return { origin, socket, messages, until, send, join, sessions, config };
 }
+
+test('管理密码保护网站设置，修改立即生效并在重启后保留', async t => {
+  const { origin, config, join, send, until, socket } = await setup(t, { webPassword: '旧访问密码' });
+  await join();
+  const endpoint = `${origin}/api/settings`;
+  assert.equal((await fetch(endpoint)).status, 401);
+  assert.equal((await fetch(endpoint, { headers: { Authorization: 'Bearer wrong-password' } })).status, 401);
+  assert.equal((await fetch(endpoint, { method: 'PUT', body: '{}' })).status, 401);
+  const headers = { Authorization: `Bearer ${config.adminPassword}`, 'Content-Type': 'application/json' };
+  assert.deepEqual(await (await fetch(endpoint, { headers })).json(), { siteName: 'TSWeb', webPassword: '旧访问密码', securityLevel: 8 });
+  const values = { siteName: '朋友的语音网页', webPassword: '新的访问密码', securityLevel: 12 };
+  const save = body => fetch(endpoint, { method: 'PUT', headers, body: JSON.stringify(body) });
+  assert.equal((await save({ ...values, securityLevel: 21 })).status, 400);
+  assert.equal(config.securityLevel, 8);
+  assert.equal((await save({ ...values, securityLevel: 8.5 })).status, 400);
+  assert.equal((await save({ ...values, siteName: ' ' })).status, 400);
+  const response = await save(values);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), values);
+  const update = await until(message => message.type === 'site-config');
+  assert.deepEqual(update, { type: 'site-config', siteName: values.siteName, passwordRequired: true });
+  assert.equal(socket.readyState, WebSocket.OPEN);
+  send('refresh', { id: 'still-connected' });
+  await until(message => message.id === 'still-connected');
+  const publicText = await (await fetch(`${origin}/api/config`)).text();
+  assert.equal(publicText.includes(values.webPassword), false);
+  assert.equal(publicText.includes(config.adminPassword), false);
+  assert.equal(JSON.parse(publicText).siteName, values.siteName);
+
+  const restored = { ...readConfig({ SERVER_NAME: '环境初始值', WEB_PASSWORD: '环境初始密码' }), dataDir: config.dataDir };
+  await loadSettings(restored);
+  assert.equal(restored.serverName, values.siteName);
+  assert.equal(restored.webPassword, values.webPassword);
+  assert.equal(restored.securityLevel, 12);
+  assert.equal(restored.adminPassword, config.adminPassword);
+
+  const next = new WebSocket(origin.replace('http:', 'ws:') + '/ws');
+  await once(next, 'open');
+  const target = { type: 'join', identity: '22222222-2222-4222-8222-222222222222', nickname: '新的用户', serverAddress: 'ts.example.com' };
+  let received = once(next, 'message');
+  next.send(JSON.stringify({ ...target, password: '旧访问密码' }));
+  assert.match(JSON.parse((await received)[0]).message, /密码/);
+  received = once(next, 'message');
+  next.send(JSON.stringify({ ...target, password: values.webPassword }));
+  assert.equal(JSON.parse((await received)[0]).type, 'joined');
+  next.close();
+
+  assert.equal((await save({ ...values, webPassword: '' })).status, 200);
+  assert.equal((await (await fetch(`${origin}/api/config`)).json()).passwordRequired, false);
+});
 
 test('页面、健康检查及配置只返回公开信息', async t => {
   const { origin } = await setup(t, { webPassword: '网页秘密' });

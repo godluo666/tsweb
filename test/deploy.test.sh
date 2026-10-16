@@ -8,6 +8,7 @@ cat > "$fixture/bin/docker" <<'MOCK'
 #!/usr/bin/env bash
 case "$*" in
   info|'compose version'|'compose pull'|'compose up -d --wait --wait-timeout 120') exit 0 ;;
+  'compose logs --no-log-prefix tsweb') printf '管理密码：deployment-test-admin\n'; exit 0 ;;
   *) echo "Unexpected Docker command: $*" >&2; exit 1 ;;
 esac
 MOCK

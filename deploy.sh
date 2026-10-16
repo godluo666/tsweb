@@ -94,3 +94,5 @@ COMPOSE
 docker compose pull
 docker compose up -d --wait --wait-timeout 120
 printf '\nTSWeb 已启动，HTTP 监听：%s:%s\n请用自己的 HTTPS 反向代理转发至此端口，并开启 WebSocket 支持。\n' "$bind_address" "$web_port"
+docker compose logs --no-log-prefix tsweb | sed -n '/^管理密码：/p'
+printf '点击网页右上角的齿轮，可修改网页名称、访问密码和 TS 身份安全等级。\n'

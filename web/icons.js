@@ -12,6 +12,7 @@ const paths = {
   leave: '<path d="M10 17l5-5-5-5m5 5H2m7-9h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H9"/>',
   refresh: '<path d="M20 7v5h-5M4 17v-5h5m10-3a8 8 0 0 0-13-4L4 7m16 10-2 2A8 8 0 0 1 5 15"/>',
   lock: '<rect x="4" y="10" width="16" height="12" rx="3"/><path d="M8 10V6a4 4 0 0 1 8 0v4m-4 5v2"/>',
+  settings: '<path d="m9 3-1 3-3 1-2 3 2 2-1 3 3 2 1 3h4l1-3 3-1 3-3-2-2 1-3-3-2-1-3H9Z"/><circle cx="11" cy="12" r="3"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
   close: '<path d="m6 6 12 12M6 18 18 6"/>',
   globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a18 18 0 0 1 0 20 18 18 0 0 1 0-20Z"/>',

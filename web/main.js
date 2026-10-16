@@ -1,6 +1,7 @@
 import './style.css';
 import { icon } from './icons.js';
 import { VoiceAudio } from './audio.js';
+import { mountSettings } from './settings.js';
 
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -40,6 +41,23 @@ function notify(message) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { $('#toast').hidden = true; }, 6000);
 }
+
+function applyPublicConfig(config) {
+  state.config = config;
+  $('#password-field').hidden = !config.passwordRequired;
+  $('#web-password').required = config.passwordRequired;
+  $('.connect-logo>span').textContent = config.siteName;
+  document.title = `${config.siteName} · TeamSpeak 网页客户端`;
+  renderStatus();
+}
+
+async function loadPublicConfig() {
+  const response = await fetch('/api/config');
+  if (!response.ok) throw new Error('无法读取服务器配置');
+  applyPublicConfig(await response.json());
+}
+
+mountSettings(applyPublicConfig, notify);
 
 function request(type, payload = {}) {
   return new Promise((resolve, reject) => {
@@ -177,6 +195,7 @@ async function connect(event) {
         if (entry) { clearTimeout(entry.timer); pending.delete(message.id); message.type === 'ack' ? entry.resolve() : entry.reject(new Error(message.message)); }
       } else if (message.type === 'error') notify(message.message);
       if (message.type === 'notice') notify(message.message);
+      if (message.type === 'site-config') applyPublicConfig({ siteName: message.siteName, passwordRequired: message.passwordRequired });
       if (message.type === 'joined') {
         state.connected = true; state.connecting = false; state.nickname = message.nickname;
         state.serverAddress = message.serverAddress;
@@ -207,6 +226,7 @@ async function connect(event) {
     $('#connect-error').textContent = error.message;
     socket?.close();
     disconnected(error.message);
+    try { await loadPublicConfig(); } catch { /* Keep the connection error visible. */ }
   }
 }
 
@@ -292,9 +312,6 @@ $('#chat-form').onsubmit = async event => {
 window.addEventListener('pagehide', () => socket?.close());
 
 try {
-  const response = await fetch('/api/config');
-  if (!response.ok) throw new Error('无法读取服务器配置');
-  state.config = await response.json();
-  $('#password-field').hidden = !state.config.passwordRequired;
+  await loadPublicConfig();
 } catch (error) { $('#connect-error').textContent = error.message; }
 renderStatus();

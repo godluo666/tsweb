@@ -28,13 +28,17 @@ curl -fsSL https://raw.githubusercontent.com/godluo666/tsweb/main/deploy.sh | ba
 
 部署文件保存在当前目录下的 `tsweb` 中，身份数据保存在 Docker 命名卷中。
 
-需要网页访问密码时，使用：
+## 网页设置
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/godluo666/tsweb/main/deploy.sh | bash -s -- --web-password '网页访问密码'
-```
+首次启动会生成管理密码，一键部署结束时会显示。点击网页右上角的齿轮，输入管理密码，即可修改：
 
-其他可选参数：`--port 18080`、`--name '我的语音网页'`、`--dir /opt/tsweb`。部署机器需要能访问目标 TS 服务器的 UDP 语音端口。
+- 网页名称
+- 网页访问密码，留空可取消
+- TS 身份安全等级（8–20，默认 8）
+
+保存后立即生效，身份安全等级用于后续连接。设置和管理密码保存在数据卷中，更新镜像后继续保留；网页保存的设置优先于启动环境变量。需要再次查看管理密码时，在安装目录执行 `docker compose logs tsweb`。
+
+需要更改 HTTP 端口或安装目录时，可在部署命令中使用 `--port 18080`、`--dir /opt/tsweb`。部署机器需要能访问目标 TS 服务器的 UDP 语音端口。
 
 ## 本机一条命令
 
@@ -71,7 +75,7 @@ docker compose pull && docker compose up -d
 
 - 远程使用麦克风必须通过 HTTPS；`http://服务器IP:8080` 无法调用麦克风。本机 `localhost` 可以使用 HTTP。
 - 语音支持 Opus Voice / Opus Music 频道；旧的 Speex / CELT 频道应改为 Opus。文字发送遵守 TS 权限与 1024 字节限制。
-- 默认身份安全等级为 8；更高要求的服务器可通过 `TS_SECURITY_LEVEL` 设置为 8–20。服务器容量、权限及同一出口 IP 的防洪限制仍由 TS 管理；多人集中加入时需为网关 IP 调整服务器的连接限制。
+- 默认身份安全等级为 8；更高要求的服务器可在网页设置中调整为 8–20。服务器容量、权限及同一出口 IP 的防洪限制仍由 TS 管理；多人集中加入时需为网关 IP 调整服务器的连接限制。
 - 网页消息只保留在当前会话，最多 200 条。手机浏览器进入后台或锁屏可能暂停音频；断开后可重新连接。
 - 麦克风上行使用 48 kHz 单声道 PCM，通过网关编码为 Opus；连续发送时上行约 0.8 Mbps。下行直接传输 TS 的 Opus 数据包。
 - 清除浏览器站点数据或删除服务端数据卷会生成新身份。每个浏览器身份同时允许一个通话标签页。
