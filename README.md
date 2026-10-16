@@ -6,21 +6,35 @@
 
 ## 一键部署
 
-准备已启动的 Docker，将网页域名解析到部署机器，开放 TCP 80、443。把命令里的域名换成自己的：
+准备已启动的 Docker，执行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/godluo666/tsweb/main/deploy.sh | bash -s -- --domain voice.example.com
+curl -fsSL https://raw.githubusercontent.com/godluo666/tsweb/main/deploy.sh | bash
 ```
 
-打开 `https://voice.example.com`，填写服务器地址、昵称及可选的服务器密码后连接。每位用户独立选择服务器，退出后可换一个地址重新连接。HTTPS 证书由 Caddy 自动申请和续期，所有配置及数据保存在当前目录下的 `tsweb` 项目中。
+服务默认监听 `127.0.0.1:8080`。在自己的反向代理中设置：
 
-希望给网页设置访问密码时，在同一条命令后追加：
+- 上游地址：`http://127.0.0.1:8080`
+- 开启 WebSocket 转发（`/ws`）
+- 使用自己准备的 HTTPS 域名和证书
+
+反代运行在其他机器或容器中时，部署命令改为：
 
 ```bash
---web-password '网页访问密码'
+curl -fsSL https://raw.githubusercontent.com/godluo666/tsweb/main/deploy.sh | bash -s -- --bind 0.0.0.0
 ```
 
-其他可选参数：`--name '我的语音网页'`、`--dir /opt/tsweb`。部署机器需要能访问目标 TS 服务器的 UDP 语音端口。
+此时反代上游填写 `http://部署机器的内网IP:8080`。打开自己配置的 HTTPS 网页地址，填写要加入的 TS 服务器地址、昵称和可选的服务器密码后连接。每位用户独立选择 TS 服务器，退出后可换一个地址重新连接。
+
+部署文件保存在当前目录下的 `tsweb` 中，身份数据保存在 Docker 命名卷中。
+
+需要网页访问密码时，使用：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/godluo666/tsweb/main/deploy.sh | bash -s -- --web-password '网页访问密码'
+```
+
+其他可选参数：`--port 18080`、`--name '我的语音网页'`、`--dir /opt/tsweb`。部署机器需要能访问目标 TS 服务器的 UDP 语音端口。
 
 ## 本机一条命令
 
@@ -28,7 +42,7 @@ curl -fsSL https://raw.githubusercontent.com/godluo666/tsweb/main/deploy.sh | ba
 docker run -d --name tsweb --restart unless-stopped -p 127.0.0.1:8080:8080 -v tsweb-data:/app/data ghcr.io/godluo666/tsweb:latest
 ```
 
-打开 `http://localhost:8080`。公网使用上方的 HTTPS 一键部署。
+本机打开 `http://localhost:8080`。远程使用时，通过自己的 HTTPS 反向代理访问。
 
 TS 就在 Docker 宿主机上时，在网页的服务器地址中填写 `host.docker.internal`；Linux 的 `docker run` 再加 `--add-host host.docker.internal:host-gateway`。一键脚本已包含该映射。
 
