@@ -13,6 +13,7 @@ let savedVolumes;
 try { savedVolumes = JSON.parse(localStorage.getItem('tsweb.userVolumes') || '{}'); } catch { savedVolumes = {}; }
 const sessionVolumes = new Map();
 let detailInfo = null;
+let volumeClientId = 0;
 
 const codecName = value => ({ 0: 'Speex Narrowband', 1: 'Speex Wideband', 2: 'Speex Ultra-Wideband', 3: 'CELT Mono', 4: 'Opus Voice', 5: 'Opus Music' }[value] || '未知编码');
 const volumeKey = client => `${state.serverAddress}\n${client.uid || `session:${client.id}`}`;
@@ -30,10 +31,11 @@ function setUserVolume(client, value) {
     localStorage.setItem('tsweb.userVolumes', JSON.stringify(savedVolumes));
   }
   audio?.setUserVolume(client.id, volume / 100);
-  const member = $(`[data-member="${client.id}"]`);
+  const member = $(`[data-client="${client.id}"]`);
   if (member) {
     member.querySelector('[data-user-volume]').value = volume;
     member.querySelector('[data-volume-reset]').textContent = `${volume}%`;
+    member.querySelector('[data-volume-toggle]').title = `${client.name}的音量：${volume}%`;
     member.classList.toggle('silenced', volume === 0);
   }
 }
@@ -43,6 +45,7 @@ $('#app').innerHTML = `
     <aside class="rail" aria-label="应用"><a class="app-mark" href="/" aria-label="TSWeb 首页">${icon('headset')}</a><span class="rail-line"></span><div class="server-dot" title="TeamSpeak">TS</div></aside>
     <aside class="sidebar" id="sidebar">
       <div class="server-heading"><div><span class="eyebrow">服务器</span><h1 id="server-name">TeamSpeak</h1></div><span class="server-badge">TS</span><button id="close-menu" class="icon-button mobile-menu" aria-label="关闭频道列表">${icon('close')}</button></div>
+      <section class="voice-controls" aria-label="语音控制"><button id="mic" class="control-button muted" disabled aria-label="开启麦克风" title="开启麦克风">${icon('micOff')}</button><button id="deafen" class="control-button" disabled aria-label="关闭收听" title="关闭收听">${icon('headset')}</button><span class="controls-divider"></span><label class="volume-label" title="收听音量">${icon('volume')}<input id="volume" type="range" min="0" max="150" value="100" aria-label="收听音量"><span id="volume-value">100%</span></label></section>
       <div class="channel-label"><span>语音频道</span><button class="icon-button" id="refresh" aria-label="刷新频道" title="刷新频道">${icon('refresh')}</button></div>
       <nav id="channels" class="channels" aria-label="TeamSpeak 频道"><div class="sidebar-empty">连接服务器后<br>在这里选择频道</div></nav>
       <div class="connection-panel"><div class="connection-title"><span class="status-dot" id="status-dot"></span><span id="status-label">尚未连接</span></div><div id="connection-detail">未选择服务器</div></div>
@@ -50,11 +53,6 @@ $('#app').innerHTML = `
     </aside>
     <main class="main">
       <header class="topbar"><button class="icon-button mobile-menu" id="menu" aria-label="打开频道列表">${icon('menu')}</button><span class="channel-symbol">${icon('volume')}</span><div class="topbar-title"><strong id="channel-name">TeamSpeak</strong><span id="channel-subtitle">未选择频道</span></div><div class="topbar-count" title="可见在线成员">${icon('users')}<span id="online-count">0</span></div><button id="channel-info" class="icon-button" title="频道信息" aria-label="查看频道信息" aria-expanded="false" disabled>${icon('info')}</button></header>
-      <section class="voice-stage" aria-label="当前频道成员">
-        <div class="stage-heading"><div><span class="eyebrow">当前频道</span><h2 id="stage-title">尚未连接</h2><p id="stage-description">连接 TeamSpeak 后显示频道成员。</p></div><span class="live-tag" id="live-tag"><span></span> 未连接</span></div>
-        <div id="members" class="members"><div class="stage-empty">${icon('users')}<span>暂无频道成员</span></div></div>
-        <div class="voice-controls"><div class="control-buttons"><button id="mic" class="control-button muted" disabled aria-label="开启麦克风">${icon('micOff')}<span>开启麦克风</span></button><button id="deafen" class="control-button" disabled aria-label="关闭收听">${icon('headset')}<span>正在收听</span></button><span class="controls-divider"></span><label class="volume-label" title="收听音量">${icon('volume')}<input id="volume" type="range" min="0" max="150" value="100" aria-label="收听音量"><span id="volume-value">100%</span></label></div><span class="audio-hint" id="audio-hint">进入后默认静音</span></div>
-      </section>
       <section class="chat-panel" aria-label="频道文字聊天"><div class="chat-heading"><h2>${icon('chat')}频道消息</h2><span>同步至 TeamSpeak 频道</span></div><div id="messages" class="messages" role="log" aria-live="polite"></div><form id="chat-form" class="chat-form"><label class="sr-only" for="message-input">频道消息</label><input id="message-input" autocomplete="off" placeholder="连接后发送消息" disabled><button id="send" type="submit" aria-label="发送消息" disabled>${icon('send')}</button></form><div class="chat-footer"><span><kbd>Enter</kbd> 发送</span><span>消息仅保留在本次会话</span></div></section>
       <footer class="app-footer" aria-label="连接质量"><span class="network-metric" title="浏览器与网页服务之间的往返延迟">${icon('globe')}网页延迟 <strong id="web-latency">—</strong></span><span class="network-metric" title="网页服务与 TeamSpeak 之间的 UDP 往返延迟">${icon('signal')}TS 延迟 <strong id="ts-latency">—</strong></span><span class="network-metric" title="最近 60 秒 TS UDP 探测丢包率；5 秒内未收到响应计为丢失">探测丢包 <strong id="packet-loss">—</strong></span></footer>
     </main>
@@ -116,45 +114,69 @@ function orderedChannels() {
 }
 
 function renderChannels() {
-  if (!state.connected) { $('#channels').innerHTML = '<div class="sidebar-empty">连接服务器后<br>在这里选择频道</div>'; return; }
-  $('#channels').innerHTML = orderedChannels().map(channel => {
+  const container = $('#channels');
+  if (!state.connected) { container.innerHTML = '<div class="sidebar-empty">连接服务器后<br>在这里选择频道</div>'; return; }
+  const channels = orderedChannels();
+  const channelIds = new Set(channels.map(channel => channel.id));
+  const clientIds = new Set(state.clients.map(client => String(client.id)));
+  if (!clientIds.has(String(volumeClientId))) volumeClientId = 0;
+  for (const node of [...container.children]) if (!channelIds.has(node.dataset.channelGroup)) node.remove();
+  for (const node of container.querySelectorAll('[data-client]')) if (!clientIds.has(node.dataset.client)) node.remove();
+  for (const [index, channel] of channels.entries()) {
+    let group = container.querySelector(`[data-channel-group="${channel.id}"]`);
+    if (!group) {
+      group = document.createElement('section');
+      group.className = 'channel-group';
+      group.dataset.channelGroup = channel.id;
+      group.innerHTML = `<div class="channel-line"><button class="channel-row" data-channel="${escape(channel.id)}"><span class="channel-icon"></span><span class="channel-name"></span><small></small></button><button class="icon-button channel-info-trigger" data-info="${escape(channel.id)}" title="频道信息">${icon('info')}</button></div><div class="channel-clients"></div>`;
+    }
+    if (container.children[index] !== group) container.insertBefore(group, container.children[index] || null);
     const clients = state.clients.filter(client => client.channelId === channel.id);
-    return `<div class="channel-group"><div class="channel-line"><button class="channel-row ${channel.id === state.channelId ? 'active' : ''}" data-channel="${escape(channel.id)}" style="--depth:${channel.depth}" title="进入 ${escape(channel.name)}">${icon(channel.hasPassword ? 'lock' : 'volume')}<span>${escape(channel.name)}</span><small>${clients.length || ''}</small></button><button class="icon-button channel-info-trigger" data-info="${escape(channel.id)}" aria-label="查看 ${escape(channel.name)} 的频道信息" title="频道信息">${icon('info')}</button></div>${clients.map(client => `<div class="channel-client ${state.speaking.includes(client.id) ? 'speaking' : ''}" data-client="${client.id}" style="--depth:${channel.depth}"><span class="tiny-avatar" style="--avatar-hue:${client.id * 47 % 360}">${escape([...client.name][0])}</span><span>${escape(client.name)}</span>${client.id === state.selfId ? '<small>你</small>' : ''}<i class="speaking-light"></i></div>`).join('')}</div>`;
-  }).join('') || '<div class="sidebar-empty">没有可见频道</div>';
-}
-
-function renderMembers() {
-  if (!state.connected) { $('#members').innerHTML = `<div class="stage-empty">${icon('users')}<span>暂无频道成员</span></div>`; $('#online-count').textContent = '0'; return; }
-  const members = state.clients.filter(client => client.channelId === state.channelId);
-  $('#online-count').textContent = state.clients.length;
-  const container = $('#members');
-  const ids = new Set(members.map(client => String(client.id)));
-  for (const node of [...container.children]) if (!ids.has(node.dataset.member)) node.remove();
-  for (const client of members) {
-    const self = client.id === state.selfId;
-    const muted = self ? state.muted : client.muted;
-    let node = container.querySelector(`[data-member="${client.id}"]`);
-    if (!node) {
-      node = document.createElement('article');
-      node.dataset.member = client.id;
-      node.innerHTML = `<div class="member-top"><div class="member-avatar"><span class="member-initial"></span><span class="member-status"></span></div><div class="member-meta"><strong></strong><span></span></div></div>${self ? '<div class="member-gain self-label">当前用户</div>' : `<div class="member-gain">${icon('volume')}<input type="range" min="0" max="200" step="1" data-user-volume="${client.id}"><button type="button" data-volume-reset="${client.id}" title="恢复为 100%"></button></div>`}`;
-      container.append(node);
+    const button = group.querySelector('[data-channel]');
+    button.classList.toggle('active', channel.id === state.channelId);
+    button.style.setProperty('--depth', channel.depth);
+    button.title = `进入 ${channel.name}`;
+    group.querySelector('.channel-icon').innerHTML = icon(channel.hasPassword ? 'lock' : 'volume');
+    group.querySelector('.channel-name').textContent = channel.name;
+    button.querySelector('small').textContent = clients.length || '';
+    group.querySelector('[data-info]').setAttribute('aria-label', `查看 ${channel.name} 的频道信息`);
+    const list = group.querySelector('.channel-clients');
+    for (const [clientIndex, client] of clients.entries()) {
+      const self = client.id === state.selfId;
+      const muted = self ? state.muted : client.muted;
+      const deafened = self ? state.deafened : client.deafened;
+      let node = container.querySelector(`[data-client="${client.id}"]`);
+      if (!node) {
+        node = document.createElement('div');
+        node.dataset.client = client.id;
+        node.innerHTML = `<div class="client-row"><span class="tiny-avatar"></span><span class="client-name"></span>${self ? '<small class="client-self-label">你</small>' : ''}<span class="client-state"></span>${self ? '' : `<button type="button" class="client-volume-toggle" data-volume-toggle="${client.id}" aria-controls="client-volume-${client.id}">${icon('volume')}</button>`}</div>${self ? '' : `<div class="client-volume-panel" id="client-volume-${client.id}" hidden><input type="range" min="0" max="200" step="1" data-user-volume="${client.id}"><button type="button" data-volume-reset="${client.id}" title="恢复为 100%"></button></div>`}`;
+      }
+      if (list.children[clientIndex] !== node) list.insertBefore(node, list.children[clientIndex] || null);
+      node.className = `channel-client${state.speaking.includes(client.id) ? ' speaking' : ''}${!self && userVolume(client) === 0 ? ' silenced' : ''}`;
+      node.style.setProperty('--depth', channel.depth);
+      const avatar = node.querySelector('.tiny-avatar');
+      avatar.style.setProperty('--avatar-hue', client.id * 47 % 360);
+      avatar.textContent = [...client.name][0] || '?';
+      node.querySelector('.client-name').textContent = client.name;
+      node.querySelector('.client-name').title = client.name;
+      node.querySelector('.client-state').innerHTML = icon(deafened ? 'earOff' : muted ? 'micOff' : 'mic');
+      node.querySelector('.client-state').title = deafened ? '已关闭收听' : muted ? '麦克风关闭' : '麦克风开启';
+      if (!self) {
+        const expanded = volumeClientId === client.id;
+        const toggle = node.querySelector('[data-volume-toggle]');
+        toggle.title = `${client.name}的音量：${userVolume(client)}%`;
+        toggle.setAttribute('aria-label', `调节 ${client.name} 的音量`);
+        toggle.setAttribute('aria-expanded', String(expanded));
+        node.querySelector('.client-volume-panel').hidden = !expanded;
+        const slider = node.querySelector('[data-user-volume]');
+        slider.value = userVolume(client);
+        slider.setAttribute('aria-label', `${client.name}的收听音量`);
+        node.querySelector('[data-volume-reset]').textContent = `${userVolume(client)}%`;
+      }
     }
-    node.className = `member${state.speaking.includes(client.id) ? ' speaking' : ''}${!self && userVolume(client) === 0 ? ' silenced' : ''}`;
-    node.style.setProperty('--avatar-hue', client.id * 47 % 360);
-    node.querySelector('.member-initial').textContent = [...client.name][0] || '?';
-    node.querySelector('.member-status').innerHTML = icon(client.deafened ? 'earOff' : muted ? 'micOff' : 'mic');
-    node.querySelector('.member-meta strong').textContent = client.name;
-    node.querySelector('.member-meta strong').title = client.name;
-    node.querySelector('.member-meta>span').textContent = `${self ? '你 · ' : ''}${client.deafened ? '已关闭收听' : muted ? '麦克风关闭' : '麦克风开启'}`;
-    if (!self) {
-      const slider = node.querySelector('[data-user-volume]');
-      slider.value = userVolume(client);
-      slider.setAttribute('aria-label', `${client.name}的收听音量`);
-      node.querySelector('[data-volume-reset]').textContent = `${userVolume(client)}%`;
-    }
+    for (const node of [...list.children]) if (!clients.some(client => String(client.id) === node.dataset.client)) node.remove();
   }
-  if (!members.length) container.innerHTML = '<div class="stage-empty">正在同步频道成员</div>';
+  if (!channels.length) container.innerHTML = '<div class="sidebar-empty">没有可见频道</div>';
 }
 
 function renderConnectionStats() {
@@ -236,31 +258,28 @@ function renderStatus() {
   $('#server-name').title = state.connected ? state.serverAddress : '';
   $('#connection-detail').textContent = channel?.name || '未选择服务器';
   $('#channel-name').textContent = channel?.name || 'TeamSpeak';
-  $('#stage-title').textContent = state.connected ? channel?.name || '已加入服务器' : '尚未连接';
-  $('#stage-description').textContent = state.connected ? supportedCodec ? `${state.clients.filter(client => client.channelId === state.channelId).length} 位成员 · ${codecName(channel?.codec)}` : '此频道使用旧音频编码，请在 TS 中改为 Opus Voice 或 Opus Music。' : '连接 TeamSpeak 后显示频道成员。';
   $('#channel-subtitle').textContent = state.connected ? state.serverAddress : '未选择频道';
-  $('#live-tag').innerHTML = `<span></span>${state.connected ? '已连接' : '未连接'}`;
-  $('#live-tag').classList.toggle('connected', state.connected);
+  $('#online-count').textContent = state.connected ? state.clients.length : 0;
   for (const id of ['mic', 'deafen', 'leave', 'message-input', 'send', 'refresh', 'channel-info']) $(`#${id}`).disabled = !state.connected;
   $('#mic').disabled = !state.connected || !supportedCodec;
   $('#self-name').textContent = state.connected ? state.nickname : '未连接';
   $('#self-avatar').textContent = state.connected ? [...state.nickname][0] : 'U';
   $('#self-detail').textContent = state.connected ? state.muted ? '麦克风已关闭' : '麦克风已开启' : '浏览器客户端';
-  $('#mic').innerHTML = `${icon(state.muted ? 'micOff' : 'mic')}<span>${state.muted ? '开启麦克风' : '麦克风已开'}</span>`;
+  $('#mic').innerHTML = icon(state.muted ? 'micOff' : 'mic');
   $('#mic').classList.toggle('muted', state.muted);
   $('#mic').setAttribute('aria-label', state.muted ? '开启麦克风' : '关闭麦克风');
   $('#mic').setAttribute('aria-pressed', String(!state.muted));
-  $('#deafen').innerHTML = `${icon(state.deafened ? 'earOff' : 'headset')}<span>${state.deafened ? '收听已关' : '正在收听'}</span>`;
+  $('#mic').title = supportedCodec ? $('#mic').getAttribute('aria-label') : '此频道使用旧音频编码，请在 TS 中改为 Opus Voice 或 Opus Music';
+  $('#deafen').innerHTML = icon(state.deafened ? 'earOff' : 'headset');
   $('#deafen').setAttribute('aria-label', state.deafened ? '开启收听' : '关闭收听');
   $('#deafen').setAttribute('aria-pressed', String(state.deafened));
+  $('#deafen').title = $('#deafen').getAttribute('aria-label');
   $('#deafen').classList.toggle('muted', state.deafened);
   $('#message-input').placeholder = state.connected ? `发消息到 ${channel?.name || '当前频道'}…` : '连接后，发送一条消息…';
-  $('#audio-hint').textContent = state.connected ? state.muted ? '你的麦克风已静音' : '回声消除 · 自动降噪' : '进入后默认静音';
 }
 
 function onSpeaking(ids) {
   state.speaking = ids;
-  for (const element of document.querySelectorAll('[data-member]')) element.classList.toggle('speaking', ids.includes(Number(element.dataset.member)));
   for (const element of document.querySelectorAll('[data-client]')) element.classList.toggle('speaking', ids.includes(Number(element.dataset.client)));
 }
 
@@ -275,6 +294,7 @@ function disconnected(message) {
   state.stats = null;
   clearTimeout(statsTimer);
   sessionVolumes.clear();
+  volumeClientId = 0;
   $('#channel-details').hidden = true;
   $('#channel-info').setAttribute('aria-expanded', 'false');
   detailInfo = null;
@@ -283,7 +303,7 @@ function disconnected(message) {
   void audio?.close();
   audio = null;
   renderStatus();
-  renderChannels(); renderMembers(); renderMessages();
+  renderChannels(); renderMessages();
   renderConnectionStats();
   if (wasConnected) $('#connect-error').textContent = message || '通话已结束，可以重新连接。';
 }
@@ -331,7 +351,7 @@ async function connect(event) {
         if (changed) audio?.reset();
         audio?.syncUsers(state.clients);
         for (const client of state.clients) if (client.id !== state.selfId) audio?.setUserVolume(client.id, userVolume(client) / 100);
-        renderChannels(); renderMembers(); renderStatus(); renderMessages();
+        renderChannels(); renderStatus(); renderMessages();
         if (!$('#channel-details').hidden && detailInfo) {
           const channel = state.channels.find(item => item.id === detailInfo.id);
           if (channel) { detailInfo = { ...detailInfo, ...channel }; renderChannelInfo(detailInfo); }
@@ -374,6 +394,19 @@ $('#menu').onclick = () => $('#sidebar').classList.toggle('mobile-open');
 $('#close-menu').onclick = () => $('#sidebar').classList.remove('mobile-open');
 $('#refresh').onclick = () => request('refresh').catch(error => notify(error.message));
 $('#channels').onclick = async event => {
+  const toggle = event.target.closest('[data-volume-toggle]');
+  if (toggle) {
+    const id = Number(toggle.dataset.volumeToggle);
+    volumeClientId = volumeClientId === id ? 0 : id;
+    renderChannels();
+    return;
+  }
+  const reset = event.target.closest('[data-volume-reset]');
+  if (reset) {
+    const client = state.clients.find(item => item.id === Number(reset.dataset.volumeReset));
+    if (client) setUserVolume(client, 100);
+    return;
+  }
   const info = event.target.closest('[data-info]');
   if (info) { void openChannelInfo(info.dataset.info); $('#sidebar').classList.remove('mobile-open'); return; }
   const channel = event.target.closest('[data-channel]');
@@ -391,16 +424,10 @@ $('#channels').onclick = async event => {
 };
 $('#channel-info').onclick = () => openChannelInfo(state.channelId);
 $('#close-channel-info').onclick = () => { $('#channel-details').hidden = true; $('#channel-info').setAttribute('aria-expanded', 'false'); };
-$('#members').oninput = event => {
+$('#channels').oninput = event => {
   if (!event.target.matches('[data-user-volume]')) return;
   const client = state.clients.find(item => item.id === Number(event.target.dataset.userVolume));
   if (client) setUserVolume(client, event.target.value);
-};
-$('#members').onclick = event => {
-  const button = event.target.closest('[data-volume-reset]');
-  if (!button) return;
-  const client = state.clients.find(item => item.id === Number(button.dataset.volumeReset));
-  if (client) setUserVolume(client, 100);
 };
 $('#cancel-password').onclick = () => $('#password-dialog').close();
 $('#channel-password-form').onsubmit = async event => {
@@ -424,7 +451,7 @@ $('#mic').onclick = async () => {
       await request('audio-state', { muted: true, deafened: state.deafened });
     }
   } catch (error) { notify(error.name === 'NotAllowedError' ? '请允许浏览器使用麦克风，再点击开启。' : error.message); }
-  renderStatus(); renderMembers();
+  renderStatus(); renderChannels();
 };
 $('#deafen').onclick = async () => {
   const next = !state.deafened;
@@ -434,6 +461,7 @@ $('#deafen').onclick = async () => {
     audio.setOutput(Number($('#volume').value) / 100, next);
     audio.reset();
     renderStatus();
+    renderChannels();
   } catch (error) { notify(error.message); }
 };
 $('#volume').oninput = () => {
