@@ -31,6 +31,7 @@ jobs:
         run: node --test test/live.integration.js
         env:
           TS_HOST: 127.0.0.1
+          TS_TEST_DOMAIN: localhost
       - name: Show TeamSpeak logs on failure
         if: failure()
         run: docker logs tsweb-test-ts || true
@@ -72,7 +73,7 @@ jobs:
         env:
           IMAGE: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
         run: |
-          docker run -d --name tsweb-smoke -p 127.0.0.1:8080:8080 -e TS_HOST=example.test "$IMAGE"
+          docker run -d --name tsweb-smoke -p 127.0.0.1:8080:8080 "$IMAGE"
           for attempt in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8080/health; then break; fi
             sleep 1

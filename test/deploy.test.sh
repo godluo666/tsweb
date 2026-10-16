@@ -12,6 +12,6 @@ case "$*" in
 esac
 MOCK
 chmod +x "$fixture/bin/docker"
-PATH="$fixture/bin:$PATH" bash deploy.sh --domain voice.example.com --ts-host ts.example.com --ts-password "pa'ss\$word\\tail" --web-password '中文 $秘密' --name '朋友的频道' --dir "$fixture/site"
+PATH="$fixture/bin:$PATH" bash deploy.sh --domain voice.example.com --web-password "中文 pa'ss\$word\\tail" --name '朋友的语音网页' --dir "$fixture/site"
 "$real_docker" compose --project-directory "$fixture/site" config --format json > "$fixture/config.json"
 node test/deploy-config.assert.mjs "$fixture/config.json"

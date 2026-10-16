@@ -3,6 +3,7 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { WebSocketServer, WebSocket } from 'ws';
 import { TeamSpeakSession } from './teamspeak.js';
+import { parseServerAddress } from './address.js';
 
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.wasm': 'application/wasm', '.png': 'image/png', '.ico': 'image/x-icon' };
 
@@ -17,7 +18,7 @@ export function createApp(config, sessionFactory = (...args) => new TeamSpeakSes
     }
     if (pathname === '/api/config') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      res.end(JSON.stringify({ serverName: config.serverName, configured: Boolean(config.tsHost), passwordRequired: Boolean(config.webPassword) })); return;
+      res.end(JSON.stringify({ siteName: config.serverName, passwordRequired: Boolean(config.webPassword) })); return;
     }
     try {
       const file = path.resolve(config.distDir, `.${decodeURIComponent(pathname === '/' ? '/index.html' : pathname)}`);
@@ -77,15 +78,15 @@ export function createApp(config, sessionFactory = (...args) => new TeamSpeakSes
           message = JSON.parse(data.toString());
           if (message.type === 'join') {
             if (session) throw new Error('当前连接已经加入服务器');
-            if (!config.tsHost) throw new Error('请部署者设置 TS_HOST');
             if (config.webPassword && message.password !== config.webPassword) throw new Error('访问密码不正确');
             const nickname = String(message.nickname || '').trim();
             if ([...nickname].length < 3 || [...nickname].length > 30) throw new Error('昵称需要 3–30 个字符');
             if (!/^[a-f0-9-]{36}$/i.test(message.identity || '')) throw new Error('浏览器身份无效，请重新打开页面');
             if (identities.has(message.identity)) throw new Error('这个浏览器身份已在通话中，请关闭另一个通话标签页');
+            const target = { ...parseServerAddress(message.serverAddress), password: String(message.serverPassword || '') };
             key = message.identity;
             identities.add(key);
-            session = sessionFactory(config, key, nickname);
+            session = sessionFactory(config, key, nickname, target);
             session.on('voice', frame => {
               if (socket.readyState !== WebSocket.OPEN || socket.bufferedAmount > 128 * 1024) return;
               const packet = Buffer.allocUnsafe(frame.data.length + 3);
@@ -101,11 +102,16 @@ export function createApp(config, sessionFactory = (...args) => new TeamSpeakSes
             await session.connect();
             if (closed) { await session.close(); return; }
             connected = true;
-            send({ type: 'joined', nickname: session.nickname || nickname });
+            send({ type: 'joined', nickname: session.nickname || nickname, serverAddress: target.address });
             await refresh();
           } else {
             if (!connected) throw new Error('请先连接 TeamSpeak');
-            if (message.type === 'chat') {
+            if (message.type === 'leave') {
+              await cleanup();
+              if (message.id) send({ type: 'ack', id: message.id });
+              socket.close();
+              return;
+            } else if (message.type === 'chat') {
               const text = String(message.text || '').trim();
               if (!text || Buffer.byteLength(text, 'utf8') > 1024) throw new Error('消息需要 1–1024 字节');
               send({ type: 'chat', ...await session.chat(text) });

@@ -8,13 +8,17 @@ import path from 'node:path';
 import { TeamSpeakSession } from '../server/teamspeak.js';
 import { readConfig } from '../server/config.js';
 import OpusScript from 'opusscript';
+import { parseServerAddress } from '../server/address.js';
 
 test('真实 TS3：两位成员进入、收发文字和 Opus 语音、断开释放连接', { timeout: 90_000 }, async () => {
   assert.ok(process.env.TS_HOST, '需要 TS_HOST 指向测试 TeamSpeak 服务器');
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'tsweb-live-'));
   const config = { ...readConfig(), dataDir };
-  const alice = new TeamSpeakSession(config, '11111111-1111-4111-8111-111111111111', 'TSWeb Alice');
-  const bob = new TeamSpeakSession(config, '22222222-2222-4222-8222-222222222222', 'TSWeb Bob');
+  const port = process.env.TS_PORT || 9987;
+  const target = { ...parseServerAddress(`${process.env.TS_HOST}:${port}`), password: process.env.TS_PASSWORD || '' };
+  const domainTarget = { ...parseServerAddress(`${process.env.TS_TEST_DOMAIN || process.env.TS_HOST}:${port}`), password: target.password };
+  const alice = new TeamSpeakSession(config, '11111111-1111-4111-8111-111111111111', 'TSWeb Alice', target);
+  const bob = new TeamSpeakSession(config, '22222222-2222-4222-8222-222222222222', 'TSWeb Bob', domainTarget);
   const decoder = new OpusScript(48000, 1, OpusScript.Application.VOIP);
   try {
     // The server may still be starting when CI creates the container.

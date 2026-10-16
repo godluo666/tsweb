@@ -3,10 +3,7 @@ services:
     image: ghcr.io/godluo666/tsweb:latest
     restart: unless-stopped
     environment:
-      TS_HOST: ${TS_HOST:?请设置现有 TeamSpeak 服务器地址}
-      TS_PORT: ${TS_PORT:-9987}
-      TS_PASSWORD: ${TS_PASSWORD:-}
-      SERVER_NAME: ${SERVER_NAME:-TeamSpeak}
+      SERVER_NAME: ${SERVER_NAME:-TSWeb}
       WEB_PASSWORD: ${WEB_PASSWORD:-}
       TS_SECURITY_LEVEL: ${TS_SECURITY_LEVEL:-8}
     ports:

@@ -4,7 +4,7 @@ import { VoiceAudio } from './audio.js';
 
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-const state = { connected: false, connecting: false, nickname: '', selfId: 0, channelId: '', channels: [], clients: [], messages: [], muted: true, deafened: false, speaking: [], config: null };
+const state = { connected: false, connecting: false, serverAddress: '', nickname: '', selfId: 0, channelId: '', channels: [], clients: [], messages: [], muted: true, deafened: false, speaking: [], config: null };
 let socket, audio, requestId = 0;
 const pending = new Map();
 let toastTimer;
@@ -30,7 +30,7 @@ $('#app').innerHTML = `
       <footer class="app-footer"><span>TS<span class="footer-accent">Web</span></span><span>只有声音，更近一点。</span></footer>
     </main>
   </div>
-  <div class="connect-layer" id="connect-layer"><section class="connect-card" aria-labelledby="connect-title"><div class="connect-logo">${icon('headset')}<span>TS<span>Web</span></span></div><span class="connect-kicker">TEAMSpeak, IN YOUR BROWSER</span><h2 id="connect-title">加入频道，<br>聊在一起。</h2><p class="connect-description">你的 TeamSpeak，现在打开网页就能用。</p><div class="connect-server"><span class="status-dot ready"></span><strong id="target-server">TeamSpeak</strong><span>语音 · 频道聊天</span></div><form id="connect-form"><label for="nickname">你的昵称</label><input id="nickname" autocomplete="nickname" placeholder="朋友们熟悉的名字" required minlength="3" maxlength="60"><div id="password-field" hidden><label for="web-password">访问密码</label><input id="web-password" type="password" autocomplete="current-password" placeholder="部署者设置的访问密码"></div><p id="connect-error" class="form-error" role="alert"></p><button class="primary-button" id="connect" type="submit"><span>连接服务器</span>${icon('arrow')}</button></form><p class="connect-note">${icon('micOff')} 进入时麦克风关闭，由你决定何时开口。</p></section><span class="connect-bottom">轻一点，聊得更近。</span></div>
+  <div class="connect-layer" id="connect-layer"><section class="connect-card" aria-labelledby="connect-title"><div class="connect-logo">${icon('headset')}<span>TS<span>Web</span></span></div><span class="connect-kicker">TEAMSPEAK, IN YOUR BROWSER</span><h2 id="connect-title">选择服务器，<br>聊在一起。</h2><p class="connect-description">填写 IP 或域名，加入你的 TeamSpeak。</p><form id="connect-form"><label for="server-address">服务器地址</label><input id="server-address" type="text" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="ts.example.com 或 203.0.113.10:9987" aria-describedby="server-address-hint" required><p id="server-address-hint" class="field-hint">可带 :端口，不填写时使用 9987</p><label for="nickname">你的昵称</label><input id="nickname" autocomplete="nickname" placeholder="朋友们熟悉的名字" required minlength="3" maxlength="60"><div class="connect-field"><label for="server-password">服务器密码 <span class="optional-label">可选</span></label><input id="server-password" type="password" autocomplete="off" placeholder="TeamSpeak 服务器密码"></div><div id="password-field" hidden><label for="web-password">网页访问密码</label><input id="web-password" type="password" autocomplete="current-password" placeholder="部署者设置的网页访问密码"></div><p id="connect-error" class="form-error" role="alert"></p><button class="primary-button" id="connect" type="submit"><span>连接服务器</span>${icon('arrow')}</button></form><p class="connect-note">${icon('micOff')} 进入时麦克风关闭，由你决定何时开口。</p></section><span class="connect-bottom">轻一点，聊得更近。</span></div>
   <dialog id="password-dialog"><form id="channel-password-form"><div class="dialog-heading"><h2>${icon('lock')}频道密码</h2><button type="button" class="icon-button" id="cancel-password" aria-label="取消">${icon('close')}</button></div><p id="password-channel"></p><label for="channel-password" class="sr-only">频道密码</label><input id="channel-password" type="password" autocomplete="off" placeholder="输入频道密码" required><button class="primary-button" type="submit">进入频道 ${icon('arrow')}</button></form></dialog>
   <div id="toast" class="toast" role="alert" hidden></div>`;
 
@@ -69,7 +69,7 @@ function orderedChannels() {
 }
 
 function renderChannels() {
-  if (!state.connected) return;
+  if (!state.connected) { $('#channels').innerHTML = '<div class="sidebar-empty">连接服务器后<br>在这里选择频道</div>'; return; }
   $('#channels').innerHTML = orderedChannels().map(channel => {
     const clients = state.clients.filter(client => client.channelId === channel.id);
     return `<div class="channel-group"><button class="channel-row ${channel.id === state.channelId ? 'active' : ''}" data-channel="${escape(channel.id)}" style="--depth:${channel.depth}" title="进入 ${escape(channel.name)}">${icon(channel.hasPassword ? 'lock' : 'volume')}<span>${escape(channel.name)}</span><small>${clients.length || ''}</small></button>${clients.map(client => `<div class="channel-client ${state.speaking.includes(client.id) ? 'speaking' : ''}" data-client="${client.id}" style="--depth:${channel.depth}"><span class="tiny-avatar" style="--avatar-hue:${client.id * 47 % 360}">${escape([...client.name][0])}</span><span>${escape(client.name)}</span>${client.id === state.selfId ? '<small>你</small>' : ''}<i class="speaking-light"></i></div>`).join('')}</div>`;
@@ -77,7 +77,7 @@ function renderChannels() {
 }
 
 function renderMembers() {
-  if (!state.connected) return;
+  if (!state.connected) { $('#members').innerHTML = `<div class="stage-empty">${icon('headset')}<span>朋友们的声音，就在这里。</span></div>`; $('#online-count').textContent = '0'; return; }
   const members = state.clients.filter(client => client.channelId === state.channelId);
   $('#online-count').textContent = state.clients.length;
   $('#members').innerHTML = members.map(client => `<div class="member ${state.speaking.includes(client.id) ? 'speaking' : ''}" data-member="${client.id}"><div class="member-avatar" style="--avatar-hue:${client.id * 47 % 360}">${escape([...client.name][0])}<span class="member-status">${icon(client.deafened ? 'earOff' : (client.id === state.selfId ? state.muted : client.muted) ? 'micOff' : 'mic')}</span></div><strong>${escape(client.name)}</strong><span>${client.id === state.selfId ? '你' : '频道成员'}</span></div>`).join('') || '<div class="stage-empty">频道成员正在同步…</div>';
@@ -97,10 +97,12 @@ function renderStatus() {
   const channel = state.channels.find(channel => channel.id === state.channelId);
   const supportedCodec = !channel || [4, 5].includes(channel.codec);
   $('#connect-layer').hidden = state.connected;
-  $('#connect').disabled = state.connecting || !state.config?.configured;
+  $('#connect').disabled = state.connecting || !state.config;
   $('#connect').innerHTML = state.connecting ? '<span class="spinner"></span><span>正在连接…</span>' : `<span>连接服务器</span>${icon('arrow')}`;
   $('#status-label').textContent = state.connected ? '语音已连接' : state.connecting ? '正在连接' : '尚未连接';
   $('#status-dot').classList.toggle('ready', state.connected);
+  $('#server-name').textContent = state.connected ? state.serverAddress : state.config?.siteName || 'TSWeb';
+  $('#server-name').title = state.connected ? state.serverAddress : '';
   $('#connection-detail').textContent = channel?.name || '准备好，随时开聊';
   $('#channel-name').textContent = channel?.name || '语音大厅';
   $('#stage-title').textContent = state.connected ? channel?.name || '已加入服务器' : '等你加入';
@@ -137,11 +139,14 @@ function disconnected(message) {
   state.connecting = false;
   state.muted = true;
   state.deafened = false;
+  state.channels = []; state.clients = []; state.messages = [];
+  state.channelId = ''; state.selfId = 0; state.speaking = [];
   for (const entry of pending.values()) { clearTimeout(entry.timer); entry.reject(new Error(message || '连接已断开')); }
   pending.clear();
   void audio?.close();
   audio = null;
   renderStatus();
+  renderChannels(); renderMembers(); renderMessages();
   if (wasConnected) $('#connect-error').textContent = message || '通话已结束，可以重新连接。';
 }
 
@@ -149,6 +154,8 @@ async function connect(event) {
   event.preventDefault();
   if (state.connecting) return;
   const nickname = $('#nickname').value.trim();
+  const serverAddress = $('#server-address').value.trim();
+  if (!serverAddress) { $('#connect-error').textContent = '请填写服务器的 IP 或域名'; return; }
   if ([...nickname].length < 3 || [...nickname].length > 30) { $('#connect-error').textContent = '昵称需要 3–30 个字符'; return; }
   state.connecting = true;
   $('#connect-error').textContent = '';
@@ -169,7 +176,14 @@ async function connect(event) {
         if (entry) { clearTimeout(entry.timer); pending.delete(message.id); message.type === 'ack' ? entry.resolve() : entry.reject(new Error(message.message)); }
       } else if (message.type === 'error') notify(message.message);
       if (message.type === 'notice') notify(message.message);
-      if (message.type === 'joined') { state.connected = true; state.connecting = false; state.nickname = message.nickname; renderStatus(); }
+      if (message.type === 'joined') {
+        state.connected = true; state.connecting = false; state.nickname = message.nickname;
+        state.serverAddress = message.serverAddress;
+        localStorage.setItem('tsweb.server', message.serverAddress);
+        $('#server-address').value = message.serverAddress;
+        $('#server-password').value = '';
+        renderStatus();
+      }
       if (message.type === 'snapshot') {
         const changed = state.channelId !== message.channelId;
         Object.assign(state, { selfId: message.selfId, channelId: message.channelId, channels: message.channels, clients: message.clients });
@@ -186,7 +200,7 @@ async function connect(event) {
       socket.onopen = () => { clearTimeout(timer); resolve(); };
       socket.onerror = () => { clearTimeout(timer); reject(new Error('无法连接网页服务，请检查网络')); };
     });
-    await request('join', { nickname, identity, password: $('#web-password').value });
+    await request('join', { nickname, identity, serverAddress, serverPassword: $('#server-password').value, password: $('#web-password').value });
     await request('audio-state', { muted: true, deafened: false });
   } catch (error) {
     $('#connect-error').textContent = error.message;
@@ -197,7 +211,14 @@ async function connect(event) {
 
 $('#connect-form').addEventListener('submit', connect);
 $('#nickname').value = localStorage.getItem('tsweb.nickname') || '';
-$('#leave').onclick = () => { $('#connect-error').textContent = '已离开服务器'; socket?.close(); };
+$('#server-address').value = localStorage.getItem('tsweb.server') || '';
+$('#leave').onclick = async () => {
+  $('#leave').disabled = true;
+  $('#connect-error').textContent = '已离开服务器，可以填写另一个地址重新连接。';
+  try { await request('leave'); }
+  catch (error) { notify(error.message); }
+  finally { socket?.close(); }
+};
 $('#menu').onclick = () => $('#sidebar').classList.toggle('mobile-open');
 $('#close-menu').onclick = () => $('#sidebar').classList.remove('mobile-open');
 $('#refresh').onclick = () => request('refresh').catch(error => notify(error.message));
@@ -270,9 +291,6 @@ try {
   const response = await fetch('/api/config');
   if (!response.ok) throw new Error('无法读取服务器配置');
   state.config = await response.json();
-  $('#server-name').textContent = state.config.serverName;
-  $('#target-server').textContent = state.config.serverName;
   $('#password-field').hidden = !state.config.passwordRequired;
-  if (!state.config.configured) $('#connect-error').textContent = '服务器尚未设置 TS_HOST，请部署者配置 TeamSpeak 地址后重启。';
 } catch (error) { $('#connect-error').textContent = error.message; }
 renderStatus();

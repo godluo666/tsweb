@@ -1,10 +1,14 @@
 import { EventEmitter } from 'node:events';
+import { setDefaultResultOrder } from 'node:dns';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Client, generateIdentity, identityFromString, clientMove, noopLogger } from '@honeybbq/teamspeak-client';
 import { buildCommand } from '@honeybbq/teamspeak-client/command';
 import OpusScript from 'opusscript';
 import { ServerView } from './view.js';
+
+// Docker's default network has IPv4 connectivity; IPv6 literals still resolve as IPv6.
+setDefaultResultOrder('ipv4first');
 
 export async function loadIdentity(config, key) {
   await mkdir(config.dataDir, { recursive: true });
@@ -24,21 +28,22 @@ export async function loadIdentity(config, key) {
 }
 
 export class TeamSpeakSession extends EventEmitter {
-  constructor(config, key, nickname) {
+  constructor(config, key, nickname, target) {
     super();
-    Object.assign(this, { config, key, nickname, muted: false, deafened: false, closed: false });
+    Object.assign(this, { config, key, nickname, target, muted: false, deafened: false, closed: false });
     this.view = new ServerView(() => this.emit('change'));
   }
 
   async connect() {
     const identity = await loadIdentity(this.config, this.key);
     if (this.closed) return;
-    const host = this.config.tsHost.includes(':') && !this.config.tsHost.startsWith('[')
-      ? `[${this.config.tsHost}]` : this.config.tsHost;
-    this.client = new Client(identity, `${host}:${this.config.tsPort}`, this.nickname, {
-      serverPassword: this.config.serverPassword,
+    const options = {
+      serverPassword: this.target.password,
       logger: noopLogger,
-    });
+    };
+    // An explicit port takes precedence over the domain's SRV/TSDNS records.
+    if (this.target.explicitPort) options.resolver = { resolve: async () => [{ addr: this.target.address }] };
+    this.client = new Client(identity, this.target.address, this.nickname, options);
     this.client.on('voiceData', frame => {
       if (!this.closed && !this.deafened && (frame.codec === 4 || frame.codec === 5)) {
         this.emit('voice', frame);
