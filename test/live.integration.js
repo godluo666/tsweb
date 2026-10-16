@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { once } from 'node:events';
+import { once, on } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
@@ -9,6 +9,18 @@ import { TeamSpeakSession } from '../server/teamspeak.js';
 import { readConfig } from '../server/config.js';
 import OpusScript from 'opusscript';
 import { parseServerAddress } from '../server/address.js';
+
+async function waitForView(session, ready) {
+  const changes = on(session, 'change', { signal: AbortSignal.timeout(5000) });
+  try {
+    let snapshot = await session.snapshot();
+    if (ready(snapshot)) return snapshot;
+    for await (const _ of changes) {
+      snapshot = await session.snapshot();
+      if (ready(snapshot)) return snapshot;
+    }
+  } finally { await changes.return(); }
+}
 
 test('真实 TS3：两位成员进入、收发文字和 Opus 语音、断开释放连接', { timeout: 90_000 }, async () => {
   assert.ok(process.env.TS_HOST, '需要 TS_HOST 指向测试 TeamSpeak 服务器');
@@ -25,7 +37,7 @@ test('真实 TS3：两位成员进入、收发文字和 Opus 语音、断开释�
     await delay(Number(process.env.TS_STARTUP_DELAY || 5000));
     await alice.connect();
     await bob.connect();
-    const snapshot = await alice.snapshot();
+    const snapshot = await waitForView(alice, value => value.clients.some(client => client.name === 'TSWeb Bob'));
     assert.ok(snapshot.channels.length > 0);
     assert.ok(snapshot.clients.some(client => client.name === 'TSWeb Bob'));
     assert.notEqual(snapshot.channelId, '0');
@@ -41,19 +53,18 @@ test('真实 TS3：两位成员进入、收发文字和 Opus 语音、断开释�
     assert.ok(decoder.decode(Buffer.from(voice.data)).length > 0);
     const defaultChannel = snapshot.channelId;
     await alice.client.execCommand('channelcreate channel_name=TSWeb-test-channel channel_codec=4 channel_flag_temporary=1');
-    await delay(200);
-    const created = (await alice.snapshot()).channels.find(channel => channel.name === 'TSWeb-test-channel');
+    const createdView = await waitForView(alice, value => value.channels.some(channel => channel.name === 'TSWeb-test-channel'));
+    const created = createdView.channels.find(channel => channel.name === 'TSWeb-test-channel');
     assert.ok(created, '新频道应通过原生通知进入频道树');
     await bob.move(created.id, '');
-    await delay(200);
-    assert.equal((await bob.snapshot()).channelId, created.id);
+    assert.equal((await waitForView(bob, value => value.channelId === created.id)).channelId, created.id);
     await alice.move(defaultChannel, '');
     await bob.move(defaultChannel, '');
     await alice.audioState(true, false);
     assert.equal(alice.muted, true);
     await bob.close();
-    await delay(500);
-    assert.equal((await alice.snapshot()).clients.some(client => client.name === 'TSWeb Bob'), false);
+    const afterLeave = await waitForView(alice, value => !value.clients.some(client => client.name === 'TSWeb Bob'));
+    assert.equal(afterLeave.clients.some(client => client.name === 'TSWeb Bob'), false);
   } finally {
     decoder.delete();
     await alice.close(); await bob.close();
